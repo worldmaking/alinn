@@ -11,6 +11,7 @@
   "dependencies": {
     "@tensorflow/tfjs": "0.12.4",
     "@tensorflow/tfjs-core": "0.12.15",
-    "@tensorflow/tfjs-node": "0.1.14"
+    "@tensorflow/tfjs-node": "0.1.14",
+    "yarn": "^1.9.4"
   }
 }
