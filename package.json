@@ -1,0 +1,16 @@
+{
+  "name": "alice_nn_learning",
+  "version": "1.0.0",
+  "description": "",
+  "main": "nn_1.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tensorflow/tfjs": "0.12.4",
+    "@tensorflow/tfjs-core": "0.12.15",
+    "@tensorflow/tfjs-node": "0.1.14"
+  }
+}
