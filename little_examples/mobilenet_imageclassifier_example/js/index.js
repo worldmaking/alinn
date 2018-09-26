@@ -10,11 +10,7 @@ img.onload = function() {
     console.log("network loaded")
     // Classify the image.
     model.classify(img).then(predictions => {
-      console.log('Predictions: ');
-      console.log(predictions);
-      let str = JSON.stringify(predictions, null, "  ");
-      
-      document.body.insertAdjacentHTML( 'beforeend', `<pre>${str}</pre>` );
+      document.body.insertAdjacentHTML( 'beforeend', `<pre>${JSON.stringify(predictions, null, "  ")}</pre>` );
     });
   });
 }
