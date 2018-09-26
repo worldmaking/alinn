@@ -50,6 +50,8 @@ pull into a page using one of these:
 - https://wagenaartje.github.io/neataptic/cdn/1.4.7/neataptic.js
 - https://cdn.jsdelivr.net/npm/neataptic@1.4.7/dist/neataptic.min.js
 
+... and put `neataptic.` in front of the methods, e.g. `new neataptic.Network(...)`
+
 
 Many tutorials here: https://wagenaartje.github.io/neataptic/docs/tutorials/tutorials/
 https://codepen.io/grrrwaaa/pen/pOMqMG?editors=1010
