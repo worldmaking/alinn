@@ -43,7 +43,22 @@ TextureGAN: https://towardsdatascience.com/cvpr-2018-paper-summary-texturegan-co
 
 ## Genetic Algorithms for NNs
 
-I made this simple version using raw JS: https://codepen.io/grrrwaaa/pen/QBZOyB?editors=0010``
+I made this simple version using raw JS: https://codepen.io/grrrwaaa/pen/QBZOyB?editors=0010
+
+Neataptic.js
+pull into a page using one of these: 
+- https://wagenaartje.github.io/neataptic/cdn/1.4.7/neataptic.js
+- https://cdn.jsdelivr.net/npm/neataptic@1.4.7/dist/neataptic.min.js
+
+
+Many tutorials here: https://wagenaartje.github.io/neataptic/docs/tutorials/tutorials/
+https://codepen.io/grrrwaaa/pen/pOMqMG?editors=1010
+https://github.com/wagenaartje/neataptic
+
+Evolving agents example here: https://corpr8.github.io/neataptic-targetseeking-tron/
+https://wagenaartje.github.io/neataptic/articles/neuroevolution/
+
+
 
 Evolving Simple Organisms using a Genetic Algorithm and Deep Learning from Scratch with Python
 https://nathanrooy.github.io/posts/2017-11-30/evolving-simple-organisms-using-a-genetic-algorithm-and-deep-learning/
