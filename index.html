@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+  border: 0;
+  overflow: hidden; /*  Disable scrollbars */
+  display: block; /* No floating content on sides */
+  font-family: monospace; /* use fixed-width fonts by default */
+  /*background: #000;*/
+}
+
+/* position element above other content, anchored to top-left of page */
+#overlay {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    z-index: -1; /* layer on top of other content */
+}
+</style>
+<body>
+<canvas id="canvas"></canvas>
+<div id="overlay"></div>
+<script src="js/jquery.min.js"></script>
+<script src="js/gl-matrix-min.js"></script>
+<script>
+
+let api_url = "https://overpass-api.de/api/interpreter?data=[out:json]";
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+var ws;
+function ws_connect(opt) {
+	ws = new WebSocket(opt.transport+'://'+opt.host+':'+opt.port, opt.protocols);
+	ws.binaryType = 'arraybuffer';
+	ws.onerror = opt.onerror;
+	ws.onopen = opt.onopen;
+	ws.onmessage = opt.onmessage;
+	ws.onclose = function(e) {
+		ws = null;
+		setTimeout(function(){
+			console.log("websocket reconnecting...");
+			ws_connect(opt);
+		}, 2000);		
+		opt.onclose(e);
+	}
+	return ws;
+}
+
+ws_connect({
+	transport: "ws",
+	host: "localhost",
+	port: "8080",
+	protocols: [],
+	onerror: function() {},
+	onclose: function(e) { console.log('websocket closed', e.code); },
+	onopen: function() {
+		console.log('websocket opened');
+		// once connected, request the current scene:
+		ws.send(JSON.stringify({
+			type: "get_map",
+			value: "acc",
+			//value: "gwangju",
+			date: Date.now()
+		}));
+	},
+	onmessage: function(e) { 
+		if (e.data instanceof ArrayBuffer) {
+			console.log("ws received arraybuffer of " + e.data.byteLength + " bytes");
+		} else {
+			try {
+				var msg = JSON.parse(e.data);
+				handleMessage(msg);
+			} catch (e) {
+				console.log('ws bad JSON: ', e);
+			}
+		} 
+		// //Example code: send a binary blob:
+		// const array = new Float32Array(5);
+		// for (var i = 0; i < array.length; ++i) {
+		// 	array[i] = i / 2;
+		// }
+		// ws.send(array);
+	},
+});
+
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
+let offscreen = document.createElement('canvas');
+let blendlayer = document.createElement('canvas');
+
+// let it always fill the page:
+function resize() {
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
+	// higher resolution:
+	offscreen.width = canvas.width*8;
+	offscreen.height = canvas.height*8;
+	blendlayer.width = offscreen.width;
+	blendlayer.height = offscreen.height;
+}
+resize();
+window.addEventListener("resize", resize, false);
+
+// add a message to the overlay <div> element on the page:
+function print(msg) {
+  document.getElementById("overlay").innerHTML += msg;
+}
+
+function handleMessage(msg) {
+  if (msg.type == "map_data") {
+    map = JSON.parse(msg.value);
+    console.log(map)
+    reset();
+	drawbackground(offscreen);
+	
+  } else {
+    console.log("ws received JSON", msg);
+  }
+}
+
+
+class Agent {
+  
+  /*
+    An agent is always traveling along a *way*,
+    *from* a node *to* a node
+    between these nodes it has *progress* (0..1)
+    
+    
+    when it arrives at the *to* node, it must decide whether to continue on the way, or switch to another way on the same node.
+    
+    continuing means picking a new *to* node that is not the existing *from*
+    
+  */
+  
+  constructor() {
+    // pick a random node:
+    // let node = map.nodes[pick(map.node_ids)];
+    // this.pos = vec2.clone(node.pos);
+    
+    this.way = map.ways[pick(map.way_ids)];
+    while (this.way.nodes.length < 2) {
+      this.way = map.ways[pick(map.way_ids)];
+    }
+    
+    this.from = map.nodes[this.way.nodes[0]];
+    this.to = map.nodes[this.way.nodes[1]];
+	this.progress = 0;
+	
+	this.hue = Math.random() * 360;
+    
+    this.pos = vec2.clone(this.from.pos);
+	this.vec = vec2.sub(vec2.create(), this.to.pos, this.from.pos);
+	this.speed = 0.00001;
+    
+//     this.waystep = Math.floor(Math.random() * this.way.nodes.length);
+//     let nid = this.way.nodes[this.waystep]; 
+//     this.node = map.nodes[nid]; 
+//     this.pos = vec2.clone(this.node.pos);
+    
+//     this.dir = Math.random() < 0.5 ? 1 : -1;
+    //this.pos = this.way.geometry.coordinates[this.waypoint];//node.geometry.coordinates;
+
+  }
+  
+  move() {
+	this.progress += this.speed / vec2.length(this.vec);
+    if (this.progress > 1) {
+		this.progress -= 1;
+		// change direction:
+		// what nodes are reachable from this.to?
+		//console.log(this.to.ways.length);
+		if (this.to.ways.length == 1) {
+			// only option is to turn back:
+			let tmp = this.from;
+			this.from = this.to;
+			this.to = tmp;
+
+			vec2.sub(this.vec, this.to.pos, this.from.pos);
+		} else {
+			// pick a new node to go to:
+
+			let ways = this.to.ways.slice();
+			// sort by similarity of direction?
+
+			let preferred_dir = this.vec;
+			ways.sort((a, b) => {
+				return vec2.dot(a.dir, preferred_dir) < vec2.dot(b.dir, preferred_dir);
+			});
+
+			// probably need to store directions in the ways then.
+
+			// can dot this.vec with way.dir, for example
+
+			let r = Math.random();
+			let forwardness = 1000; // 1 means no pref, Infinity means always pick straightest
+			r = Math.pow(r, forwardness);
+			let w = ways[Math.floor(r * ways.length)]; //pick(ways);
+
+
+			// if possible, avoid returning:
+			// 
+			if (ways.length > 2) {
+				if (w.to == this.from.id) {
+					// try again:
+					w = pick(ways);
+				}
+			}
+			let tmp = map.nodes[w.to];
+			this.from = this.to;
+			this.to = tmp;
+			this.way = w.way;
+
+			vec2.copy(this.vec, w.vec);
+			
+			//this.vec = vec2.sub(vec2.create(), this.to.pos, this.from.pos);
+		}
+		
+    } 
+	vec2.lerp(this.pos, this.from.pos, this.to.pos, this.progress);
+  }
+  
+  move1() {
+    if (this.node.ways.length > 1) {
+      //console.log("dir")
+      let wid = pick(this.node.ways);
+      if (wid != this.way.id) {
+        // also need to know index of current node within the way
+        let way = map.ways[wid];
+        let step = way.nodes.indexOf(this.node.id);
+        this.way = map.ways[wid];
+        this.waystep = step;
+      }
+    }
+    
+    
+    
+    // clamp:
+    if (this.waystep < 0) {
+      this.waystep = 0;
+      if (this.node.ways.length > 1) {
+        //console.log("dir")
+        let wid = pick(this.node.ways);
+        if (wid != this.way.id) {
+          // also need to know index of current node within the way
+          let way = map.ways[wid];
+          let step = way.nodes.indexOf(this.node.id);
+          this.way = map.ways[wid];
+          this.waystep = step;
+        }
+      } else {
+        this.dir = 1;
+      }
+    } else if (this.waystep > this.way.nodes.length-1) {
+      this.waystep = this.way.nodes.length-1;
+      if (this.node.ways.length > 1) {
+        //console.log("dir")
+        let wid = pick(this.node.ways);
+        if (wid != this.way.id) {
+          // also need to know index of current node within the way
+          let way = map.ways[wid];
+          let step = way.nodes.indexOf(this.node.id);
+          this.way = map.ways[wid];
+          this.waystep = step;
+        }
+      } else {
+        this.dir = -1;
+      }
+    }
+    
+    let step0 = Math.floor(this.waystep);
+    let step1 = Math.ceil(this.waystep);
+    let a = this.waystep-step0;
+    
+    let nid0 = this.way.nodes[step0]; 
+    let nid1 = this.way.nodes[step1]; 
+    let node0 = map.nodes[nid0];
+    let node1 = map.nodes[nid1];// || node0;
+    let p0 = node0.pos;
+    let p1 = node1.pos;
+    this.node = node0; 
+    
+    let rel = vec2.sub(vec2.create(), p1, p0);
+    let d = vec2.length(rel);
+    // scale our step by this:
+    let dstep = this.dir * 0.0001 / d;
+    //console.log(dstep)
+    
+    // delta should represent a fixed speed
+    a = Math.max(Math.min(a + dstep, 1), 0);
+    this.waystep = step0 + a;
+    
+    vec2.lerp(this.pos, p0, p1, a);
+    
+    //this.pos = vec2.clone(this.node.pos);
+  }
+};
+
+let map;
+let agents = [];
+let ACC = vec2.fromValues(126.917,35.146);
+let centre = vec2.clone(ACC);
+
+function reset() {
+	framecount = 0;
+	agents = [];
+	for (let i=0; i<1000; i++) {
+		agents.push(new Agent());
+	}
+}
+
+function drawbackground(canvas) {
+	let ctx = canvas.getContext("2d");
+	let bmin = map.bounds.min;
+	let bmax = map.bounds.max;
+	let bsize = [
+		bmax[0] - bmin[0],
+		bmax[1] - bmin[1]
+	];
+	let bsizepp = [
+		bsize[0] / canvas.width,
+		bsize[1] / canvas.height
+	];
+	let is = Math.min(bsizepp[0], bsizepp[1]);
+	let is2 = 3*is;
+	let is3 = 0.1*is;
+
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+	ctx.save();
+	{
+		ctx.scale(1/bsizepp[0], 1/bsizepp[1]);
+		ctx.translate(-bmin[0], -bmin[1]);
+		ctx.lineWidth = 0.5*is;   
+		ctx.fillStyle = "hsl(0, 0%, 0%, 5%)"
+		ctx.strokeStyle = "hsl(0, 0%, 0%, 5%)"
+
+		for (let id in map.polys) {
+			let f = map.polys[id];
+			let count = 0;
+			ctx.beginPath();
+			//console.log(map.nodes[f.nodes[0]])
+			//break;
+			for (let nid of f.nodes) {
+				let node = map.nodes[nid];
+				if (count == 0) {
+					ctx.moveTo(node.pos[0], node.pos[1]);
+				} else {
+					ctx.lineTo(node.pos[0], node.pos[1]);
+				}
+				count++;
+			}
+			ctx.closePath();
+			ctx.fill();
+		}
+
+		for (let id in map.ways) {
+			let f = map.ways[id];
+			let count = 0;
+			ctx.beginPath();
+			for (let nid of f.nodes) {
+				let node = map.nodes[nid];
+				if (count == 0) {
+					ctx.moveTo(node.pos[0], node.pos[1]);
+				} else {
+					ctx.lineTo(node.pos[0], node.pos[1]);
+				}
+				count++;
+			}
+			ctx.stroke();
+		}
+
+		for (let id in map.nodes) {
+			let f = map.nodes[id];
+			ctx.fillRect(f.pos[0], f.pos[1], is2, is2);
+		}
+	}
+	ctx.restore();
+}
+
+let focalpoint;
+let focalagent = 0;
+let framecount = 0;
+let zoom = 5;
+
+function drawagents(canvas) {
+	let ctx = canvas.getContext("2d");
+	let bmin = map.bounds.min;
+	let bmax = map.bounds.max;
+	let bsize = [
+		bmax[0] - bmin[0],
+		bmax[1] - bmin[1]
+	];
+	let bsizepp = [
+		bsize[0] / canvas.width,
+		bsize[1] / canvas.height
+	];
+	let is = Math.min(bsizepp[0], bsizepp[1]);
+	let is2 = 3*is;
+	let is3 = 0.1*is;
+
+	let trails = true;
+	if (trails) {
+		ctx.fillStyle = 'rgba(255, 255, 255, .01)';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+	} else {
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+	}
+	ctx.save();
+	{
+		ctx.scale(1/bsizepp[0], 1/bsizepp[1]);
+		ctx.translate(-bmin[0], -bmin[1]);
+		ctx.lineWidth = 0.5*is;   
+		ctx.fillStyle = "hsl(0, 0%, 0%, 5%)"
+		ctx.strokeStyle = "hsl(0, 0%, 0%, 5%)"
+
+		ctx.fillStyle = 'red';	
+		for (let a of agents) {
+			a.move();
+			//ctx.fillRect(a.pos[0], a.pos[1], is3, is3);
+
+			ctx.strokeStyle = `hsl(${a.hue}, 100%, 40%)`;
+			ctx.beginPath();
+			ctx.arc(a.pos[0], a.pos[1], 20*is3, 0, Math.PI * 2);
+			ctx.fill();
+		} 
+	}
+	ctx.restore();
+}
+
+function drawmap(map) {
+	framecount++;
+	if (framecount % (60 * 10) == 0) {
+		focalagent = Math.floor(Math.random() * agents.length);
+		zoom = 1 + Math.floor(Math.random() * 10);
+	}
+
+
+	drawagents(blendlayer);
+
+	let bmin = map.bounds.min;
+	let bmax = map.bounds.max;
+	let bsize = [
+		bmax[0] - bmin[0],
+		bmax[1] - bmin[1]
+	];
+	let bcentre = [
+		bmin[0] + bsize[0]/2, 
+		bmax[1] - bsize[1]/2,
+	]
+	let bsizepp = [
+		bsize[0] / canvas.width,
+		bsize[1] / canvas.height
+	];
+
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+	
+	
+	ctx.save();
+	{
+		let is = Math.min(bsizepp[0], bsizepp[1]);
+		let is2 = 3*is;
+		let is3 = 0.3*is;
+		
+		// first, move origin to center of canvas:
+		ctx.translate(canvas.width/2, canvas.height/2);
+		// next zoom in
+		ctx.scale(zoom, zoom);
+		
+		// next scale to lat/lon scale:
+		ctx.scale(1/bsizepp[0], -1/bsizepp[1]);
+		
+		// next focus on the agent of choice:
+		let a = agents[focalagent];
+		if (!focalpoint) {
+			focalpoint = vec2.clone(bcentre);
+		} else {
+			vec2.lerp(focalpoint, focalpoint, a.pos, 0.1);
+		}
+		//ctx.translate(-a.pos[0], -a.pos[1]);
+		ctx.translate(-focalpoint[0], -focalpoint[1]);
+
+		ctx.drawImage(offscreen, 
+			0, 0, offscreen.width, offscreen.height,
+			bmin[0], bmax[1], bsize[0], -bsize[1]
+		);
+
+		ctx.drawImage(blendlayer, 
+			0, 0, blendlayer.width, blendlayer.height,
+			bmin[0], bmax[1], bsize[0], -bsize[1]
+		);
+	}
+	ctx.restore(); 
+}
+
+// render:
+function update() {
+
+  // draw
+  if (map) drawmap(map)
+  
+  // schedule next frame
+  requestAnimationFrame(update);
+}
+update();
+
+// handle some common UI events:
+canvas.addEventListener("pointermove", function(event) {
+  }, false
+);
+
+window.addEventListener("keyup", function(event) {
+  //print(event.key);
+  reset();
+  
+}, false);
+
+</script>
+</body>
+</html>

@@ -12,6 +12,9 @@
     "@tensorflow/tfjs": "0.12.4",
     "@tensorflow/tfjs-core": "0.12.15",
     "@tensorflow/tfjs-node": "0.1.14",
+    "express": "^4.16.4",
+    "gl-matrix": "^2.8.1",
+    "ws": "^6.1.0",
     "yarn": "^1.9.4"
   }
 }

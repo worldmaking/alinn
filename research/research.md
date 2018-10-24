@@ -41,6 +41,15 @@ TextureGAN: https://towardsdatascience.com/cvpr-2018-paper-summary-texturegan-co
 
 
 
+## Sharpening filter
+
+Agent leaves pheromone trail.
+
+First pass is widely dispersed. 
+Subsequent passes focus the line, sharpening it.
+Variant of a kernel sharpener? That is, degree of diffusion depends on the amount already present. 
+
+
 ## Genetic Algorithms for NNs
 
 I made this simple version using raw JS: https://codepen.io/grrrwaaa/pen/QBZOyB?editors=0010
@@ -89,9 +98,24 @@ Gwangju: 35.1768202,126.7737603
 more or less:
 
 ```
-node(35.16,126.76,35.19,126.79);
-out;
+// whole city
+node(35.1,126.78,35.25,126.94);out body;
 ```
+https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.1,126.78,35.25,126.94);way(35.1,126.78,35.25,126.94););out%20body;
+
+
+```
+// nodes & ways around ACC:
+(node(35.14,126.91,35.16,126.93);way(35.14,126.91,35.16,126.93););out body;
+```
+
+https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.12,126.85,35.20,126.93);way(35.12,126.85,35.20,126.93););out%20body;
+
+
+https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.14,126.91,35.16,126.93);way(35.14,126.91,35.16,126.93););out%20body;
+
+// ACC: 35.146,126.917
+node(35.14,126.91,35.15,126.92);out body;
 
 multiple statements (terminating with ";")
 statements are node, way, rel, or out.
@@ -99,15 +123,16 @@ statements are node, way, rel, or out.
 
 
 The OSM data ontology has these kinds of objects:
-- node
-- way
-- relation
-- bounds
+- node (a single point, with ID and metadata)
+- way (refer to lists of nodes; represent roads, and also boundary regions e.g. park edges)
+- relation (inter-relations between certain nodes & ways)
 
 It uses a query language to specify what data is required. Fantastic online test environment here:
 http://overpass-turbo.eu
 
 There are various URLs to talk to this service, but it looks like a good default is https://overpass-api.de/api/interpreter
+
+
 
 
 Lots of info here:
