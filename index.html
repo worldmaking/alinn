@@ -36,7 +36,7 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-var ws;
+let ws;
 function ws_connect(opt) {
 	ws = new WebSocket(opt.transport+'://'+opt.host+':'+opt.port, opt.protocols);
 	ws.binaryType = 'arraybuffer';
@@ -388,7 +388,7 @@ function drawbackground(canvas) {
 let focalpoint;
 let focalagent = 0;
 let framecount = 0;
-let zoom = 5;
+let zoom = 1;
 
 function drawagents(canvas) {
 	let ctx = canvas.getContext("2d");
@@ -472,7 +472,7 @@ function drawmap(map) {
 		// first, move origin to center of canvas:
 		ctx.translate(canvas.width/2, canvas.height/2);
 		// next zoom in
-		ctx.scale(zoom, zoom);
+	//	ctx.scale(zoom, zoom);
 		
 		// next scale to lat/lon scale:
 		ctx.scale(1/bsizepp[0], -1/bsizepp[1]);
@@ -482,7 +482,7 @@ function drawmap(map) {
 		if (!focalpoint) {
 			focalpoint = vec2.clone(bcentre);
 		} else {
-			vec2.lerp(focalpoint, focalpoint, a.pos, 0.1);
+	//		vec2.lerp(focalpoint, focalpoint, a.pos, 0.1);
 		}
 		//ctx.translate(-a.pos[0], -a.pos[1]);
 		ctx.translate(-focalpoint[0], -focalpoint[1]);

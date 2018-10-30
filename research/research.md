@@ -1,10 +1,5 @@
-
-
-## Experiments on codepen:
-
-Mobilenet: https://codepen.io/grrrwaaa/pen/VGxXvw
-OSM testing: https://codepen.io/grrrwaaa/pen/XPYMXr?editors=0010
-GA NN: https://codepen.io/grrrwaaa/pen/QBZOyB
+Google Doc:
+https://docs.google.com/document/d/1P1Q6xGcCU1QGF4hD1woWvZv6Y9Me5CNu7Tnqbhu5H3o/edit?usp=drive_web&ouid=112275914788197824145
 
 
 ## Overview
@@ -32,24 +27,6 @@ can you get good balance between observer-controller and autonomy, optimization 
 
 
 
-
-## Reference points
-
-https://opendot.github.io/ml4a-invisible-cities/ -- Gene Kogan etc. doing style transfer from satellite photos to imaginary cities
-
-TextureGAN: https://towardsdatascience.com/cvpr-2018-paper-summary-texturegan-controlling-deep-image-synthesis-with-texture-patches-50040c0e5cf
-
-
-
-## Sharpening filter
-
-Agent leaves pheromone trail.
-
-First pass is widely dispersed. 
-Subsequent passes focus the line, sharpening it.
-Variant of a kernel sharpener? That is, degree of diffusion depends on the amount already present. 
-
-
 ## Genetic Algorithms for NNs
 
 I made this simple version using raw JS: https://codepen.io/grrrwaaa/pen/QBZOyB?editors=0010
@@ -69,8 +46,6 @@ https://github.com/wagenaartje/neataptic
 Evolving agents example here: https://corpr8.github.io/neataptic-targetseeking-tron/
 https://wagenaartje.github.io/neataptic/articles/neuroevolution/
 
-
-
 Evolving Simple Organisms using a Genetic Algorithm and Deep Learning from Scratch with Python
 https://nathanrooy.github.io/posts/2017-11-30/evolving-simple-organisms-using-a-genetic-algorithm-and-deep-learning/
 - TL;DR - Learn how to evolve a population of simple organisms each containing a unique neural network using a genetic algorithm.
@@ -82,27 +57,40 @@ https://nathanrooy.github.io/posts/2017-11-30/evolving-simple-organisms-using-a-
 - https://github.com/zonetti/snake-neural-network/
 
 
-## Open questions
-
-Does the map generator work on a pixel-basis or some other basis more closely related to an ontology of places and connections?
-
-Pixel based search keywords: texture synthesis, inpainting, pixelRNN
-
 ## Street data
+
+Gwangju: 35.1768202,126.7737603
+ACC: 35.146,126.917
 
 Openstreetmap.org has street map coverage of Gwangju.
 It has an open API for read-only access to the data at https://wiki.openstreetmap.org/wiki/Overpass_API
 
-Gwangju: 35.1768202,126.7737603
+The OSM data ontology has these kinds of objects:
+- node (a single point, with ID and metadata)
+- way (refer to lists of nodes; represent roads, and also boundary regions e.g. park edges)
+- relation (inter-relations between certain nodes & ways)
 
-more or less:
+Live query editor:
+http://overpass-turbo.eu
+
+API endpoint:
+https://overpass-api.de/api/interpreter
+
+Docs:
+https://wiki.openstreetmap.org/wiki/Overpass_API/Language_Guide
+https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_API_by_Example
+
+Also see http://osmlab.github.io/learnoverpass/en/docs/block-queries/union/
+
+multiple statements (terminating with ";")
+statements are node, way, rel, or out.
+union of queries by "(...)"
 
 ```
 // whole city
 node(35.1,126.78,35.25,126.94);out body;
 ```
 https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.1,126.78,35.25,126.94);way(35.1,126.78,35.25,126.94););out%20body;
-
 
 ```
 // nodes & ways around ACC:
@@ -111,41 +99,56 @@ https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.1,126.78,35
 
 https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.12,126.85,35.20,126.93);way(35.12,126.85,35.20,126.93););out%20body;
 
-
 https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.14,126.91,35.16,126.93);way(35.14,126.91,35.16,126.93););out%20body;
 
-// ACC: 35.146,126.917
-node(35.14,126.91,35.15,126.92);out body;
 
-multiple statements (terminating with ";")
-statements are node, way, rel, or out.
+## Sharpening filter
+
+Agent leaves pheromone trail.
+
+First pass is widely dispersed. 
+Subsequent passes focus the line, sharpening it.
+Variant of a kernel sharpener? That is, degree of diffusion depends on the amount already present. 
+
+## Shadertoy references
+
+vein melter https://www.shadertoy.com/view/Mtc3Dj
+suture https://www.shadertoy.com/view/XddSRX
+
+kindergarten https://www.shadertoy.com/view/XltSR4
+https://www.shadertoy.com/view/Ml3SRN
+https://www.shadertoy.com/view/4ltXR4
+
+watercolour earth https://www.shadertoy.com/view/MdKfWK
+
+fizzer https://www.shadertoy.com/view/4tVcWR
+displacement with dispersion https://www.shadertoy.com/view/4ldGDB
+flesh https://www.shadertoy.com/view/ltt3zS
+
+Simpler image VFX:
+https://www.shadertoy.com/view/ltyGRV
+https://www.shadertoy.com/view/MdGSDG
+https://www.shadertoy.com/view/Mlcczf
+https://www.shadertoy.com/view/MtKcDG
+https://www.shadertoy.com/view/4ty3Dy
+https://www.shadertoy.com/view/XdSSWd
+https://www.shadertoy.com/view/MdKSDd
+
+Technically interesting
+https://www.shadertoy.com/view/MdGGzR
+https://www.shadertoy.com/view/XtBcD3
 
 
 
-The OSM data ontology has these kinds of objects:
-- node (a single point, with ID and metadata)
-- way (refer to lists of nodes; represent roads, and also boundary regions e.g. park edges)
-- relation (inter-relations between certain nodes & ways)
+## Open questions
 
-It uses a query language to specify what data is required. Fantastic online test environment here:
-http://overpass-turbo.eu
+Does the map generator work on a pixel-basis or some other basis more closely related to an ontology of places and connections?
 
-There are various URLs to talk to this service, but it looks like a good default is https://overpass-api.de/api/interpreter
+Pixel based search keywords: texture synthesis, inpainting, pixelRNN
 
+## Reference points
 
+https://opendot.github.io/ml4a-invisible-cities/ -- Gene Kogan etc. doing style transfer from satellite photos to imaginary cities
 
+TextureGAN: https://towardsdatascience.com/cvpr-2018-paper-summary-texturegan-controlling-deep-image-synthesis-with-texture-patches-50040c0e5cf
 
-Lots of info here:
-https://wiki.openstreetmap.org/wiki/Frameworks
-https://wiki.openstreetmap.org/wiki/Overpass_API/Language_Guide
-https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_API_by_Example
-
-Examples in the Frameworks page above of tools for converting the requested map data into Canvas rendering (e.g. https://github.com/kothic/kothic-js) -- and from a Canvas we can extract pixel data to feed into an image-based NN.
-
-(but, is image-based the right way? or should we be doing some kind of object-based NN that mirrors the OSM ontology?)
-
-Some npm modules that use this API -- probably we don't need to use these, and can work with the API directly, but it might be helpful to compare:
-https://github.com/marook/osm-read/
-https://www.npmjs.com/package/get-overpass
-https://github.com/plepe/overpass-frontend
-https://github.com/perliedman/query-overpass
