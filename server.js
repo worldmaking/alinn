@@ -493,22 +493,26 @@ function handlemessage(msg, session) {
 		let name = msg.value || "downtown"; // "gwangju"
 		//let geojson = fs.readFileSync(path.join("data", name + ".geojson"), "utf8");
 		//let map = sanitize_geojson(geojson);
+
+		console.log("request for", name);
 		
 		let json = fs.readFileSync(path.join("data", name + ".json"), "utf8");
 		let map = sanitize(json);
 		//console.log(map);
-		// store that:
-		fs.writeFileSync(path.join("data", name + ".sanitized.json"), JSON.stringify(map, null, 2), "utf8");
-		fs.writeFileSync(path.join("data", name + ".sanitized.min.json"), JSON.stringify(map), "utf8");
 		// before sending, lets massage the data a little.
 		//console.log("sending map data for " + name);
 		//console.log(mapstr);
+		console.log("sending", name);
 		session.socket.send(JSON.stringify({
 			type: "map_data",
 			value: JSON.stringify(map),
 			session: session.id,
 			date: Date.now()
 		}));
+
+		// store that:
+		fs.writeFileSync(path.join("data", name + ".sanitized.json"), JSON.stringify(map, null, 2), "utf8");
+		fs.writeFileSync(path.join("data", name + ".sanitized.min.json"), JSON.stringify(map), "utf8");
 	} else {
 
 		console.log("session", session.id, "received JSON", msg);

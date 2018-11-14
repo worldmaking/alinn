@@ -86,9 +86,19 @@ multiple statements (terminating with ";")
 statements are node, way, rel, or out.
 union of queries by "(...)"
 
+
+
 ```
-// whole city
-node(35.1,126.78,35.25,126.94);out body;
+/* whole city */
+[out:json]; area[name = "광주"]->.a; (node(area.a);way(area.a);); out body;
+```
+
+https://www.overpass-api.de/api/interpreter?data=[out:json];area[name="광주"]->.a;(node(area.a);way(area.a););out;
+
+https://www.overpass-api.de/api/interpreter?data=[out:json];area[name=%22%EA%B4%91%EC%A3%BC%22]-%3E.a;(node(area.a);way(area.a););out;
+
+https://www.overpass-api.de/api/interpreter?data=[out:json];area[name="광주"];(node(area);way(area););out;
+
 ```
 https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.1,126.78,35.25,126.94);way(35.1,126.78,35.25,126.94););out%20body;
 
@@ -101,6 +111,10 @@ https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.12,126.85,3
 
 https://www.overpass-api.de/api/interpreter?data=[out:json];(node(35.14,126.91,35.16,126.93);way(35.14,126.91,35.16,126.93););out%20body;
 
+
+( area[name="United Kingdom"]; )->.a;
+
+[out:json]; area[name = "Gwangju"]; ( node(area);); out body;
 
 ## Sharpening filter
 
