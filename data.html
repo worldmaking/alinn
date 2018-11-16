@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+  border: 0;
+  overflow: hidden; /*  Disable scrollbars */
+  display: block; /* No floating content on sides */
+  font-family: monospace; /* use fixed-width fonts by default */
+  /*background: #000;*/
+}
+
+.container {
+    width: 100%;
+	height: 100%;
+    /*padding-top: 69.3704254345837%; /* Aspect Ratio */
+    position: relative; /* If you want text inside of it */
+}
+
+/* position element above other content, anchored to top-left of page */
+#overlay {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    z-index: -1; /* layer on top of other content */
+}
+
+canvas {
+	position: absolute;
+    left: 0px;
+    top: 0px;
+	width: 100%;
+	height: 100%;
+}
+</style>
+<body>
+<div class="container"> 
+	<canvas id="canvas"></canvas>
+	<div id="overlay"></div>
+</div>
+<script src="js/jquery.min.js"></script>
+<script src="js/gl-matrix-min.js"></script>
+<script>
+
+let show_areas = true;
+let show_buildings = true;
+let show_ways = true;
+let show_kind;// = "buildings";
+let world_size = vec2.fromValues(34976, 23376);
+let world_size_per_pixel = vec2.fromValues(0.1, 0.1);
+let nodes = [];
+let nodemap = {};
+let ways = [];
+let areas = [];
+let buildings = [];
+
+
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
+let offscreen = new OffscreenCanvas(3840, 2160);
+
+// TODO: is it faster to do some of this via webgl shader processing?
+{
+	// get typedarray views from canvas image:
+	let imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+	let buff8 = new Uint8ClampedArray(imageData.data.buffer);
+	let buff32 = new Uint32Array(imageData.data.buffer);
+	//........Manipulate arrays here.......
+
+	// TODO: check endianness
+	// https://hacks.mozilla.org/2011/12/faster-canvas-pixel-manipulation-with-typed-arrays/
+	// data[y * canvasWidth + x] =
+    //         (255   << 24) |	// alpha
+    //         (value << 16) |	// blue
+    //         (value <<  8) |	// green
+	//          value;		// red
+
+	
+	// putImageData()
+	// http://jsfiddle.net/andrewjbaker/Fnx2w/
+	ctx.putImageData(imageData, 0, 0);
+}
+
+let img = new Image();
+img.onload = function() {
+	ctx.drawImage(img, 0, 0);
+}
+img.src = 'data/grass.png'; // Set source path
+
+
+function saveCanvasToPNG(canvas, filename="canvas_image") {
+	function dataURLtoBlob(dataurl) {
+		let arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+			bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+		while(n--) u8arr[n] = bstr.charCodeAt(n);
+		return new Blob([u8arr], {type:mime});
+	}
+	let link = document.createElement("a");
+	let imgData = canvas.toDataURL({ format:'png', multiplier:4});
+	let strDataURI = imgData.substr(22, imgData.length);
+	let blob = dataURLtoBlob(imgData);
+	let objurl = URL.createObjectURL(blob);
+	link.download = filename + ".png";
+	link.href = objurl;
+	link.target = '_blank';
+	link.click();
+} 
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+let ws;
+function ws_connect(opt) {
+	ws = new WebSocket(opt.transport+'://'+opt.host+':'+opt.port, opt.protocols);
+	ws.binaryType = 'arraybuffer';
+	ws.onerror = opt.onerror;
+	ws.onopen = opt.onopen;
+	ws.onmessage = opt.onmessage;
+	ws.onclose = function(e) {
+		ws = null;
+		setTimeout(function(){
+			console.log("websocket reconnecting...");
+			ws_connect(opt);
+		}, 2000);		
+		opt.onclose(e);
+	}
+	return ws;
+}
+
+ws_connect({
+	transport: "ws",
+	host: "localhost",
+	port: "8080",
+	protocols: [],
+	onerror: function() {},
+	onclose: function(e) { console.log('websocket closed', e.code); },
+	onopen: function() {
+		console.log('websocket opened');
+		// once connected, request the current scene:
+		// ws.send(JSON.stringify({
+		// 	type: "get_map",
+		// 	value: "nodes",
+		// 	date: Date.now()
+		// }));
+		// ws.send(JSON.stringify({
+		// 	type: "get_map",
+		// 	value: "areas",
+		// 	date: Date.now()
+		// }));
+		// ws.send(JSON.stringify({
+		// 	type: "get_map",
+		// 	value: "buildings",
+		// 	date: Date.now()
+		// }));
+		// ws.send(JSON.stringify({
+		// 	type: "get_map",
+		// 	value: "ways",
+		// 	date: Date.now()
+		// }));
+		ws.send(JSON.stringify({
+			type: "get_map",
+			value: "everything",
+			date: Date.now()
+		}));
+	},
+	onmessage: function(e) { 
+		if (e.data instanceof ArrayBuffer) {
+			console.log("ws received arraybuffer of " + e.data.byteLength + " bytes");
+		} else {
+			try {
+				var msg = JSON.parse(e.data);
+				handleMessage(msg);
+			} catch (e) {
+				console.log('ws bad JSON: ', e);
+			}
+		} 
+		// //Example code: send a binary blob:
+		// const array = new Float32Array(5);
+		// for (var i = 0; i < array.length; ++i) {
+		// 	array[i] = i / 2;
+		// }
+		// ws.send(array);
+	},
+});
+
+
+
+// let it always fill the page:
+function resize() {
+	let world_aspect = world_size[0]/world_size[1];
+	let window_aspect = window.innerWidth/window.innerHeight;
+
+	offscreen.height = 2160;
+	offscreen.width = offscreen.height * world_aspect;
+	canvas.width = offscreen.width; 
+	canvas.height = offscreen.height; 
+
+	let canvas_aspect = world_aspect/window_aspect;
+	if (canvas_aspect > 1) {
+		canvas.style.width = '100%';
+		canvas.style.height = Math.floor(100 / canvas_aspect) + "%";
+	} else {
+		canvas.style.width = Math.floor(100 * canvas_aspect) + "%";
+		canvas.style.height = '100%';
+	}
+	draw(offscreen);
+}
+resize();
+window.addEventListener("resize", resize, false);
+
+// add a message to the overlay <div> element on the page:
+function print(msg) {
+  document.getElementById("overlay").innerHTML += msg;
+}
+
+
+function parseNodes(raw) {
+	// create nodes:
+	nodes = [];
+	for (let k in raw) {
+		const v = raw[k];
+		if (k == "bounds") {
+			world_size[0] = v[0];
+			world_size[1] = v[1];
+
+			console.log("world size in meters", world_size);
+		} else {
+			let n = {
+				id: k,
+				pos: v
+				//pos: vec2.fromValues(v[0], v[1])
+			};
+			nodes.push(n);
+			nodemap[k] = n;
+		}
+	}
+}
+function parseWays(raw) {
+	ways = [];
+	for (const w of raw) {
+		ways.push(w);
+	}
+}
+function parseAreas(raw) {
+	areas = [];
+	for (const w of raw) {
+		areas.push(w);
+	}
+}
+function parseBuildings(raw) {
+	buildings = [];
+	for (const w of raw) {
+		buildings.push(w);
+	}
+}
+
+function handleMessage(msg) {
+  if (msg.type == "map_data") {
+	let name = msg.name;
+	console.log('received', name);
+	let raw = JSON.parse(msg.value);
+
+	if (name == "everything") {
+		world_size[0] = raw.bounds[0];
+		world_size[1] = raw.bounds[1];
+		console.log("world size in meters", world_size);
+		parseNodes(raw.nodes);
+		parseWays(raw.ways);
+		parseAreas(raw.areas);
+		parseBuildings(raw.buildings);
+	}
+
+	resize();
+    
+	
+  } else {
+    console.log("ws received JSON", msg);
+  }
+}
+
+function draw(dst_canvas) {
+	let ctx = dst_canvas.getContext("2d");
+	ctx.clearRect(0, 0, dst_canvas.width, dst_canvas.height);
+
+	let meters_per_pixel = world_size[1] / dst_canvas.height;
+	
+	ctx.save();
+	{
+		ctx.scale(1/meters_per_pixel, 1/meters_per_pixel);
+		ctx.lineWidth = meters_per_pixel;
+
+		ctx.fillStyle = "hsl(135, 20%, 100%)";
+		ctx.fillRect(0, 0, world_size[0], world_size[1]);
+		
+		let total = 0;
+
+		if (show_areas) {
+			ctx.fillStyle = "hsl(120, 0%, 0%, 20%)"
+			for (let a of areas) {
+				if (show_kind) {
+					if (a.kind != show_kind) continue;
+				} else {
+					switch (a.kind) {
+					case "water": ctx.fillStyle = "hsl(240, 100%, 50%, 50%)"; break;
+					case "sand":  ctx.fillStyle = "hsl(60, 100%, 25%, 50%)"; break;
+					case "grass": ctx.fillStyle = "hsl(120, 100%, 50%, 50%)"; break;
+					case "trees": ctx.fillStyle = "hsl(120, 100%, 25%, 50%)"; break;
+
+					case "homes": ctx.fillStyle = "hsl(0, 100%, 25%, 50%)"; break;
+					case "works": ctx.fillStyle = "hsl(300, 50%, 50%, 50%)"; break;
+					case "culture": ctx.fillStyle = "hsl(300, 0%, 25%, 50%)"; break;
+					
+					default: continue;
+					}
+				}
+
+				let count = 0;
+				ctx.beginPath();
+				//console.log(map.nodes[f.nodes[0]])
+				//break;
+				for (let nid of a.nodes) {
+					let node = nodemap[nid];
+					if (node) {
+						if (count == 0) {
+							ctx.moveTo(node.pos[0], node.pos[1]);
+						} else {
+							ctx.lineTo(node.pos[0], node.pos[1]);
+						}
+						count++;
+					} else {
+						console.log("missing node", nid)
+					}
+				}
+				ctx.closePath();
+				ctx.fill();
+				total++;
+			}
+		}
+		console.log("areas", total)
+
+		total = 0;
+		if (show_buildings) {
+			ctx.fillStyle = "hsl(0, 0%, 0%, 20%)";
+			let nodesize = meters_per_pixel * 0.5;
+			for (let a of buildings) {
+
+				if (a.nodes.length == 1) {
+					let n = nodemap[a.nodes[0]];
+					ctx.fillRect(n.pos[0], n.pos[1], nodesize, nodesize);
+				} else {
+
+					let count = 0;
+					ctx.beginPath();
+					//console.log(map.nodes[f.nodes[0]])
+					//break;
+					for (let nid of a.nodes) {
+						let node = nodemap[nid];
+						if (node) {
+							if (count == 0) {
+								ctx.moveTo(node.pos[0], node.pos[1]);
+							} else {
+								ctx.lineTo(node.pos[0], node.pos[1]);
+							}
+							count++;
+						} else {
+							console.log("missing node", nid)
+						}
+					}
+					ctx.closePath();
+					ctx.fill();
+				}
+				total++;
+				
+			}
+		}
+		console.log("buildings", total)
+
+
+		if (show_ways) {
+			ctx.strokeStyle = "hsl(0, 0%, 0%, 50%)"; 
+			for (let w of ways) {
+
+				if (show_kind) {
+					if (w.kind != show_kind) continue;
+				} else {
+
+					switch (w.kind) {
+					case "waterway": ctx.strokeStyle = "hsl(240, 50%, 50%, 50%)"; break;
+					case "powerway": ctx.strokeStyle = "hsl(300, 50%, 50%, 50%)"; break;
+					case "railway": ctx.strokeStyle = "hsl(180, 0%, 50%, 50%)"; break;
+					case "highway": ctx.strokeStyle = "hsl(180, 25%, 50%, 50%)"; break;
+					case "pathway": ctx.strokeStyle = "hsl(60, 50%, 50%, 50%)"; break;
+					}
+				}
+
+				let count = 0;
+				ctx.beginPath();
+				for (let nid of w.nodes) {
+					let node = nodemap[nid];
+					if (node) {
+						if (count == 0) {
+							ctx.moveTo(node.pos[0], node.pos[1]);
+						} else {
+							ctx.lineTo(node.pos[0], node.pos[1]);
+						}
+						count++;
+					} else {
+						console.log("missing node", nid)
+					}
+				}
+				ctx.stroke();
+			}
+		}
+
+	}
+	ctx.restore();
+
+	console.log("drawn");
+
+	// draw to main canvas:
+	let ctx_main = canvas.getContext("2d");
+	ctx_main.drawImage(offscreen, 
+		0, 0, offscreen.width, offscreen.height,
+		0, 0, canvas.width, canvas.height
+	);
+}
+
+// function drawbackground(canvas) {
+// 	let ctx = canvas.getContext("2d");
+// 	let bmin = map.bounds.min;
+// 	let bmax = map.bounds.max;
+// 	let bsize = [
+// 		bmax[0] - bmin[0],
+// 		bmax[1] - bmin[1]
+// 	];
+// 	let bsizepp = [
+// 		bsize[0] / canvas.width,
+// 		bsize[1] / canvas.height
+// 	];
+// 	let is = Math.min(bsizepp[0], bsizepp[1]);
+// 	let is2 = 3*is;
+// 	let is3 = 0.1*is;
+
+// 	ctx.clearRect(0, 0, canvas.width, canvas.height);
+// 	ctx.save();
+// 	{
+// 		ctx.scale(1/bsizepp[0], 1/bsizepp[1]);
+// 		ctx.translate(-bmin[0], -bmin[1]);
+// 		ctx.lineWidth = 0.5*is;   
+// 		ctx.fillStyle = "hsl(0, 0%, 0%, 5%)"
+// 		ctx.strokeStyle = "hsl(0, 0%, 0%, 5%)"
+
+// 		for (let id in map.polys) {
+// 			let f = map.polys[id];
+// 			let count = 0;
+// 			ctx.beginPath();
+// 			//console.log(map.nodes[f.nodes[0]])
+// 			//break;
+// 			for (let nid of f.nodes) {
+// 				let node = map.nodes[nid];
+// 				if (count == 0) {
+// 					ctx.moveTo(node.pos[0], node.pos[1]);
+// 				} else {
+// 					ctx.lineTo(node.pos[0], node.pos[1]);
+// 				}
+// 				count++;
+// 			}
+// 			ctx.closePath();
+// 			ctx.fill();
+// 		}
+
+// 		for (let id in map.ways) {
+// 			let f = map.ways[id];
+// 			let count = 0;
+// 			ctx.beginPath();
+// 			for (let nid of f.nodes) {
+// 				let node = map.nodes[nid];
+// 				if (count == 0) {
+// 					ctx.moveTo(node.pos[0], node.pos[1]);
+// 				} else {
+// 					ctx.lineTo(node.pos[0], node.pos[1]);
+// 				}
+// 				count++;
+// 			}
+// 			ctx.stroke();
+// 		}
+
+// 		for (let id in map.nodes) {
+// 			let f = map.nodes[id];
+// 			ctx.fillRect(f.pos[0], f.pos[1], is2, is2);
+// 		}
+// 	}
+// 	ctx.restore();
+// }
+
+// let focalpoint;
+// let focalagent = 0;
+// let framecount = 0;
+// let zoom = 1;
+
+// function drawagents(canvas) {
+// 	let ctx = canvas.getContext("2d");
+// 	let bmin = map.bounds.min;
+// 	let bmax = map.bounds.max;
+// 	let bsize = [
+// 		bmax[0] - bmin[0],
+// 		bmax[1] - bmin[1]
+// 	];
+// 	let bsizepp = [
+// 		bsize[0] / canvas.width,
+// 		bsize[1] / canvas.height
+// 	];
+// 	let is = Math.min(bsizepp[0], bsizepp[1]);
+// 	let is2 = 3*is;
+// 	let is3 = 0.1*is;
+
+// 	let trails = true;
+// 	if (trails) {
+// 		ctx.fillStyle = 'rgba(255, 255, 255, .01)';
+// 		ctx.fillRect(0, 0, canvas.width, canvas.height);
+// 	} else {
+// 		ctx.clearRect(0, 0, canvas.width, canvas.height);
+// 	}
+// 	ctx.save();
+// 	{
+// 		ctx.scale(1/bsizepp[0], 1/bsizepp[1]);
+// 		ctx.translate(-bmin[0], -bmin[1]);
+// 		ctx.lineWidth = 0.5*is;   
+// 		ctx.fillStyle = "hsl(0, 0%, 0%, 5%)"
+// 		ctx.strokeStyle = "hsl(0, 0%, 0%, 5%)"
+
+// 		ctx.fillStyle = 'red';	
+// 		for (let a of agents) {
+// 			a.move();
+// 			//ctx.fillRect(a.pos[0], a.pos[1], is3, is3);
+
+// 			ctx.strokeStyle = `hsl(${a.hue}, 100%, 40%)`;
+// 			ctx.beginPath();
+// 			ctx.arc(a.pos[0], a.pos[1], 20*is3, 0, Math.PI * 2);
+// 			ctx.fill();
+// 		} 
+// 	}
+// 	ctx.restore();
+// }
+
+// function drawmap(map) {
+// 	framecount++;
+// 	if (framecount % (60 * 10) == 0) {
+// 		focalagent = Math.floor(Math.random() * agents.length);
+// 		zoom = 1 + Math.floor(Math.random() * 10);
+// 	}
+
+
+// 	drawagents(blendlayer);
+
+// 	let bmin = map.bounds.min;
+// 	let bmax = map.bounds.max;
+// 	let bsize = [
+// 		bmax[0] - bmin[0],
+// 		bmax[1] - bmin[1]
+// 	];
+// 	let bcentre = [
+// 		bmin[0] + bsize[0]/2, 
+// 		bmax[1] - bsize[1]/2,
+// 	]
+// 	let bsizepp = [
+// 		bsize[0] / canvas.width,
+// 		bsize[1] / canvas.height
+// 	];
+
+// 	ctx.clearRect(0, 0, canvas.width, canvas.height);
+	
+	
+// 	ctx.save();
+// 	{
+// 		let is = Math.min(bsizepp[0], bsizepp[1]);
+// 		let is2 = 3*is;
+// 		let is3 = 0.3*is;
+		
+// 		// first, move origin to center of canvas:
+// 		ctx.translate(canvas.width/2, canvas.height/2);
+// 		// next zoom in
+// 	//	ctx.scale(zoom, zoom);
+		
+// 		// next scale to lat/lon scale:
+// 		ctx.scale(1/bsizepp[0], -1/bsizepp[1]);
+		
+// 		// next focus on the agent of choice:
+// 		let a = agents[focalagent];
+// 		if (!focalpoint) {
+// 			focalpoint = vec2.clone(bcentre);
+// 		} else {
+// 	//		vec2.lerp(focalpoint, focalpoint, a.pos, 0.1);
+// 		}
+// 		//ctx.translate(-a.pos[0], -a.pos[1]);
+// 		ctx.translate(-focalpoint[0], -focalpoint[1]);
+
+// 		ctx.drawImage(offscreen, 
+// 			0, 0, offscreen.width, offscreen.height,
+// 			bmin[0], bmax[1], bsize[0], -bsize[1]
+// 		);
+
+// 		ctx.drawImage(blendlayer, 
+// 			0, 0, blendlayer.width, blendlayer.height,
+// 			bmin[0], bmax[1], bsize[0], -bsize[1]
+// 		);
+// 	}
+// 	ctx.restore(); 
+// } 
+
+// render:
+function update() {
+
+  // draw
+  if (map) drawmap(map)
+  
+  // schedule next frame
+  requestAnimationFrame(update);
+}
+//update();
+
+// handle some common UI events:
+canvas.addEventListener("pointermove", function(event) {
+  }, false
+);
+
+window.addEventListener("keyup", function(event) {
+  //print(event.key);
+  //reset();
+  if (event.key == "s") {
+	  // `frame${frame.toString().padStart(5, '0')}.png`;
+	saveCanvasToPNG(canvas, show_kind);
+  }
+  
+}, false);
+
+</script>
+</body>
+</html>

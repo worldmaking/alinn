@@ -2,6 +2,28 @@ Google Doc:
 https://docs.google.com/document/d/1P1Q6xGcCU1QGF4hD1woWvZv6Y9Me5CNu7Tnqbhu5H3o/edit?usp=drive_web&ouid=112275914788197824145
 
 
+
+## Final push
+
+figured out:
+- how to render GL and do image processing that way
+- how to load data by node-json, github, or sessionstorage
+- how to save canvas as PNG
+
+progress:
+- a bunch of the data can be stored/loaded as images, and turned into float32arrays/textures for incorporating into the system
+- but some of the data (ways) has to come from json, representing a network which agents can traverse
+- 
+
+
+
+
+
+
+
+
+
+
 ## Overview
 
 System restarts each day; over 10 days have 10 histories.

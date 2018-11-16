@@ -56,6 +56,7 @@ let world_size_per_pixel = vec2.fromValues(0.1, 0.1);
 let nodes = [];
 let nodemap = {};
 let ways = [];
+let waymap = {};
 let areas = [];
 let buildings = [];
 
@@ -204,7 +205,7 @@ function parseNodes(raw) {
 			console.log("world size in meters", world_size);
 		} else {
 			let n = {
-				id: k,
+				id: +k,
 				pos: v
 				//pos: vec2.fromValues(v[0], v[1])
 			};
@@ -217,6 +218,7 @@ function parseWays(raw) {
 	ways = [];
 	for (const w of raw) {
 		ways.push(w);
+		waymap[+w.id] = w;
 	}
 }
 function parseAreas(raw) {
@@ -232,6 +234,50 @@ function parseBuildings(raw) {
 	}
 }
 
+// this makes the nodes no longer JSON stringifiable
+function addWaysToNodes() {
+
+	for (const n in nodemap) {
+		for (const w in waymap) {
+			if (n == w) {
+				console.error(n + w)
+				return;
+			}
+		}
+	}
+
+	for (const w of ways) {
+
+		// put backrefs into the nodes?
+		let p = w.nodes[0];
+		let pnode = nodemap[p];
+		for (let i=1; i<w.nodes.length; i++) {
+			let n = w.nodes[i];
+			let nnode = nodemap[n];
+
+			if (!pnode.ways) pnode.ways = [];
+			if (!nnode.ways) nnode.ways = [];
+			
+			// store relationship between p & n:
+			pnode.ways.push({ 
+				to: nnode, 
+				way: w,
+				//vec: vec_pn, 
+				//dir: vec2.normalize(vec2.create(), vec_pn)
+			});
+			nnode.ways.push({ 
+				to: pnode, 
+				way: w,
+				//vec: vec_np,
+				//dir: vec2.normalize(vec2.create(), vec_np)
+			});
+
+			p = n;
+			pnode = nnode;
+		}
+	}
+}
+
 function handleMessage(msg) {
   if (msg.type == "map_data") {
 	let name = msg.name;
@@ -242,11 +288,14 @@ function handleMessage(msg) {
 		world_size[0] = raw.bounds[0];
 		world_size[1] = raw.bounds[1];
 		console.log("world size in meters", world_size);
+
 		parseNodes(raw.nodes);
 		parseWays(raw.ways);
 		parseAreas(raw.areas);
 		parseBuildings(raw.buildings);
+		addWaysToNodes();
 	}
+	console.log(nodes);
 
 	resize();
     
@@ -356,11 +405,14 @@ function draw(dst_canvas) {
 
 		if (show_ways) {
 			ctx.strokeStyle = "hsl(0, 0%, 0%, 50%)"; 
-			for (let w of ways) {
 
-				if (show_kind) {
-					if (w.kind != show_kind) continue;
-				} else {
+
+			for (let n of nodes) {
+				if (!n.ways) continue;
+				for (let join of n.ways) {
+					let w = join.way;
+					
+					let n2 = join.to;
 
 					switch (w.kind) {
 					case "waterway": ctx.strokeStyle = "hsl(240, 50%, 50%, 50%)"; break;
@@ -369,25 +421,47 @@ function draw(dst_canvas) {
 					case "highway": ctx.strokeStyle = "hsl(180, 25%, 50%, 50%)"; break;
 					case "pathway": ctx.strokeStyle = "hsl(60, 50%, 50%, 50%)"; break;
 					}
+
+					ctx.beginPath();
+					ctx.moveTo(n.pos[0], n.pos[1]);
+					ctx.lineTo(n2.pos[0], n2.pos[1]);
+					ctx.stroke();
 				}
 
-				let count = 0;
-				ctx.beginPath();
-				for (let nid of w.nodes) {
-					let node = nodemap[nid];
-					if (node) {
-						if (count == 0) {
-							ctx.moveTo(node.pos[0], node.pos[1]);
-						} else {
-							ctx.lineTo(node.pos[0], node.pos[1]);
-						}
-						count++;
-					} else {
-						console.log("missing node", nid)
-					}
-				}
-				ctx.stroke();
 			}
+
+			// for (let w of ways) {
+
+			// 	if (show_kind) {
+			// 		if (w.kind != show_kind) continue;
+			// 	} else {
+
+			// 		switch (w.kind) {
+			// 		case "waterway": ctx.strokeStyle = "hsl(240, 50%, 50%, 50%)"; break;
+			// 		case "powerway": ctx.strokeStyle = "hsl(300, 50%, 50%, 50%)"; break;
+			// 		case "railway": ctx.strokeStyle = "hsl(180, 0%, 50%, 50%)"; break;
+			// 		case "highway": ctx.strokeStyle = "hsl(180, 25%, 50%, 50%)"; break;
+			// 		case "pathway": ctx.strokeStyle = "hsl(60, 50%, 50%, 50%)"; break;
+			// 		}
+			// 	}
+
+			// 	let count = 0;
+			// 	ctx.beginPath();
+			// 	for (let nid of w.nodes) {
+			// 		let node = nodemap[nid];
+			// 		if (node) {
+			// 			if (count == 0) {
+			// 				ctx.moveTo(node.pos[0], node.pos[1]);
+			// 			} else {
+			// 				ctx.lineTo(node.pos[0], node.pos[1]);
+			// 			}
+			// 			count++;
+			// 		} else {
+			// 			console.log("missing node", nid)
+			// 		}
+			// 	}
+			// 	ctx.stroke();
+			// }
 		}
 
 	}
